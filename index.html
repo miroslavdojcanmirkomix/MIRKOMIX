@@ -278,6 +278,48 @@ header h1,.monthtitle,.panel h2,.addbox h3,.servicebox h3{color:var(--lux-gold)!
 .lux-header-name{font-family:Georgia,'Times New Roman',serif!important;font-size:clamp(22px,4.3vw,39px)!important;line-height:1.16!important;font-weight:900!important;letter-spacing:clamp(1px,.38vw,4px)!important;text-align:center!important;text-transform:uppercase!important;color:#f8e4a9!important;background:linear-gradient(180deg,#fff8d7 0%,#e9cb7d 36%,#b78335 63%,#fff0b0 78%,#b98b42 100%);-webkit-background-clip:text!important;background-clip:text!important;-webkit-text-fill-color:transparent!important;text-shadow:0 1px 0 #fff2c7,0 2px 0 #8d672e,0 3px 0 #65451d,0 5px 10px #000b,0 0 18px #d8b5652e!important;margin:0!important;padding:0 5px!important;max-width:100%;overflow-wrap:anywhere}
 @media(max-width:420px){.lux-header{padding:14px 8px!important}.lux-header-inner{gap:10px}.lux-header-logo{width:112px!important;height:112px!important}.lux-header-name{font-size:clamp(20px,5.2vw,27px)!important;letter-spacing:1px!important}}
 </style>
+
+<style id="ui-visibility-fix">
+/* Čitateľné výbery aj na pracovnom monitore */
+.fields input,.fields select{
+  color:#eaf3ff;
+  background:#102b43;
+  color-scheme:dark;
+}
+.fields select option{
+  color:#10243a;
+  background:#ffffff;
+  font-size:16px;
+}
+#calendarCaseSelect{
+  min-height:54px;
+  font-size:16px;
+  font-weight:700;
+  padding:12px 42px 12px 14px;
+  border:2px solid #d4b15f;
+  box-shadow:0 0 0 2px rgba(212,177,95,.13);
+}
+#calendarCaseSelect option{padding:10px;font-size:16px;color:#10243a;background:#fff}
+.case-field input[type="date"],#actionDate,#actionDeliveryDate,
+input[type="date"]{
+  color-scheme:light;
+  color:#edf6ff;
+  background-color:#102b43;
+  min-height:50px;
+  padding:11px 42px 11px 14px;
+  font-size:16px;
+}
+input[type="date"]::-webkit-calendar-picker-indicator{
+  opacity:1;
+  cursor:pointer;
+  filter:brightness(0) saturate(100%) invert(83%) sepia(42%) saturate(514%) hue-rotate(2deg) brightness(95%) contrast(91%);
+  width:22px;height:22px;
+}
+@media(min-width:700px){
+  #calendarCaseSelect{min-height:58px;font-size:17px}
+  #calendarCaseSelect option{font-size:17px}
+}
+</style>
 </head><body>
 <header class="lux-header">
   <div class="lux-header-inner">
@@ -354,12 +396,13 @@ const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&
 const formatDateDMY=v=>{const s=String(v??'').trim();const m=s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);return m?String(m[3]).padStart(2,'0')+'.'+String(m[2]).padStart(2,'0')+'.'+m[1]:s};
 function load(){try{const x=JSON.parse(localStorage.getItem(STORE)||'null');if(Array.isArray(x))cases=x;else cases=[];}catch(e){cases=[];}cases=cases.filter(c=>!(String(c.id).match(/^demo-00[1-4]$/)&&String(c.note||'').includes('Fiktívny testovací spis')));cases.forEach(c=>(c.actions||[]).forEach(a=>{if(!a.recordType)a.recordType=a.status==='done'?'procedural':'task';if(a.recordType==='procedural'&&!a.completedDate)a.completedDate=a.date||'';if(typeof a.includeInCalendar!=='boolean')a.includeInCalendar=!!a.eventId;if(!a.appointmentDate)a.appointmentDate='';if(!a.receivedDate)a.receivedDate='';}));localStorage.setItem(STORE,JSON.stringify(cases));}
 function shift(n){const d=new Date();d.setDate(d.getDate()+n);return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
-let caseCloudBusy=false;let caseCloudTimer=null;const CASE_BUNDLE_ID='mirkomix-casebundle-v1';const CASE_SYNC_STAMP='mirkomix-case-sync-stamp-v1';
+let caseCloudBusy=false;let caseCloudTimer=null;const CASE_BUNDLE_ID='mirkomix-casebundle-v1';const CASE_SYNC_STAMP='mirkomix-case-sync-stamp-v1';const CASE_DIRTY_KEY='mirkomix-case-sync-dirty-v1';
 function caseCloudContext(){try{return window.serviceCalendarAPI&&window.serviceCalendarAPI.getCloudContext?window.serviceCalendarAPI.getCloudContext():null}catch(e){return null}}
-async function pushCasesToCloud(){const ctx=caseCloudContext();if(!ctx||!ctx.client||!ctx.user||caseCloudBusy)return;caseCloudBusy=true;try{const stamp=new Date().toISOString();const row={user_id:ctx.user.id,client_id:CASE_BUNDLE_ID,entry_date:todayISO(),entry_type:'otherwork',title:JSON.stringify(cases),entry_time:null,updated_at:stamp};const {error}=await ctx.client.from('calendar_entries').upsert(row,{onConflict:'user_id,client_id'});if(error)throw error;localStorage.setItem(CASE_SYNC_STAMP,stamp)}catch(e){console.warn('Synchronizácia evidencie spisov zlyhala:',e.message||e)}finally{caseCloudBusy=false}}
-async function pullCasesFromCloud(){const ctx=caseCloudContext();if(!ctx||!ctx.client||!ctx.user||caseCloudBusy)return;caseCloudBusy=true;try{const {data,error}=await ctx.client.from('calendar_entries').select('title,updated_at').eq('user_id',ctx.user.id).eq('client_id',CASE_BUNDLE_ID).maybeSingle();if(error)throw error;if(!data){caseCloudBusy=false;await pushCasesToCloud();return}const remoteStamp=Date.parse(data.updated_at||'')||0;const localStamp=Date.parse(localStorage.getItem(CASE_SYNC_STAMP)||'')||0;if(remoteStamp>localStamp){const remoteCases=JSON.parse(data.title||'[]');if(Array.isArray(remoteCases)){cases=remoteCases;localStorage.setItem(STORE,JSON.stringify(cases));localStorage.setItem(CASE_SYNC_STAMP,data.updated_at||new Date().toISOString());renderCases();if(window.refreshCalendarCaseOptions)window.refreshCalendarCaseOptions();}}else if(!localStamp){localStorage.setItem(CASE_SYNC_STAMP,data.updated_at||new Date().toISOString())}}catch(e){console.warn('Načítanie evidencie spisov z cloudu zlyhalo:',e.message||e)}finally{caseCloudBusy=false}}
-window.caseCloudSyncNow=async function(){await pullCasesFromCloud()};
-function save(){localStorage.setItem(STORE,JSON.stringify(cases));if(caseCloudTimer)clearTimeout(caseCloudTimer);caseCloudTimer=setTimeout(()=>pushCasesToCloud(),400);}
+function markCasesDirty(){try{localStorage.setItem(CASE_DIRTY_KEY,'1')}catch(e){}}
+async function pushCasesToCloud(){const ctx=caseCloudContext();if(!ctx||!ctx.client||!ctx.user)return;if(caseCloudBusy){markCasesDirty();return}caseCloudBusy=true;try{const stamp=new Date().toISOString();const row={user_id:ctx.user.id,client_id:CASE_BUNDLE_ID,entry_date:todayISO(),entry_type:'otherwork',title:JSON.stringify(cases),entry_time:null,updated_at:stamp};const {error}=await ctx.client.from('calendar_entries').upsert(row,{onConflict:'user_id,client_id'});if(error)throw error;localStorage.setItem(CASE_SYNC_STAMP,stamp);localStorage.removeItem(CASE_DIRTY_KEY)}catch(e){markCasesDirty();console.error('Synchronizácia evidencie spisov zlyhala:',e.message||e);const status=document.getElementById('cloudStatus');if(status)status.textContent='Chyba synchronizácie evidencie spisov: '+(e.message||String(e))}finally{caseCloudBusy=false}}
+async function pullCasesFromCloud(){const ctx=caseCloudContext();if(!ctx||!ctx.client||!ctx.user)return;if(caseCloudBusy)return;caseCloudBusy=true;try{const {data,error}=await ctx.client.from('calendar_entries').select('title,updated_at').eq('user_id',ctx.user.id).eq('client_id',CASE_BUNDLE_ID).maybeSingle();if(error)throw error;if(localStorage.getItem(CASE_DIRTY_KEY)==='1'){caseCloudBusy=false;await pushCasesToCloud();return}if(!data){caseCloudBusy=false;await pushCasesToCloud();return}const remoteStamp=Date.parse(data.updated_at||'')||0;const localStamp=Date.parse(localStorage.getItem(CASE_SYNC_STAMP)||'')||0;if(remoteStamp>localStamp||!localStorage.getItem(CASE_SYNC_STAMP)){const remoteCases=JSON.parse(data.title||'[]');if(Array.isArray(remoteCases)){cases=remoteCases;localStorage.setItem(STORE,JSON.stringify(cases));localStorage.setItem(CASE_SYNC_STAMP,data.updated_at||new Date().toISOString());localStorage.removeItem(CASE_DIRTY_KEY);renderCases();if(window.refreshCalendarCaseOptions)window.refreshCalendarCaseOptions();}}}catch(e){console.error('Načítanie evidencie spisov z cloudu zlyhalo:',e.message||e);const status=document.getElementById('cloudStatus');if(status)status.textContent='Chyba načítania evidencie spisov: '+(e.message||String(e))}finally{caseCloudBusy=false}}
+window.caseCloudSyncNow=async function(){if(localStorage.getItem(CASE_DIRTY_KEY)==='1')return pushCasesToCloud();return pullCasesFromCloud()};
+function save(){localStorage.setItem(STORE,JSON.stringify(cases));markCasesDirty();if(caseCloudTimer)clearTimeout(caseCloudTimer);caseCloudTimer=setTimeout(()=>pushCasesToCloud(),400);}
 function allActions(){return cases.filter(c=>!c.deleted).flatMap(c=>c.actions.map(a=>({...a,caseId:c.id,caseNumber:c.number})))}
 function calendarKind(type){return type==='Výsluch'?'interview':type==='Preštudovanie'?'study':type==='Pripomienka'?'reminder':'otherwork'}
 function syncActionToCalendar(c,a){if(!window.serviceCalendarAPI)return;if(!a.includeInCalendar){if(a.eventId)window.serviceCalendarAPI.removeLinkedEvent(a.eventId);a.eventId=null;return;}const event={id:a.eventId||uid(),title:'['+c.number+'] '+a.type+(a.note?' · '+a.note:'')+(a.status==='done'?' · VYKONANÉ':''),date:a.date,time:a.time||'',kind:calendarKind(a.type),linkedCaseId:c.id,linkedActionId:a.id};a.eventId=event.id;window.serviceCalendarAPI.upsertLinkedEvent(event);}
