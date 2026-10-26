@@ -411,7 +411,7 @@ window.caseSyncFromCalendarChange=syncCalendarToAction;window.caseRecordCalendar
 function renderCases(){
  const q=$('caseSearch').value.trim().toLocaleLowerCase('sk'),filter=$('caseFilter').value;
  const actions=allActions();
- $('caseStatOpen').textContent=cases.filter(c=>!c.deleted&&c.status==='open').length;
+ $('caseStatOpen').textContent=cases.filter(c=>!c.deleted&&(c.status==='open'||c.status==='review')).length;
  $('caseStatToday').textContent=actions.filter(a=>a.recordType!=='procedural'&&a.date===todayISO()&&a.status==='planned').length;
  $('caseStatUpcoming').textContent=actions.filter(a=>a.recordType!=='procedural'&&a.date>=todayISO()&&a.status==='planned').length;
  $('caseStatDone').textContent=actions.filter(a=>a.recordType==='procedural'||a.status==='done').length;
@@ -443,7 +443,7 @@ function renderCases(){
 let activeDashboardView='open';
 function dashboardItems(view){
  const today=todayISO(),all=allActions();
- if(view==='open')return cases.filter(c=>c.status==='open').map(c=>({kind:'case',case:c}));
+ if(view==='open')return cases.filter(c=>!c.deleted&&(c.status==='open'||c.status==='review')).map(c=>({kind:'case',case:c}));
  let selected=[];
  if(view==='today')selected=all.filter(a=>a.recordType!=='procedural'&&a.status==='planned'&&a.date===today);
  else if(view==='upcoming')selected=all.filter(a=>a.recordType!=='procedural'&&a.status==='planned'&&a.date>=today).sort((a,b)=>(a.date||'').localeCompare(b.date||'')||(a.time||'').localeCompare(b.time||''));
@@ -461,7 +461,7 @@ function showDashboardView(view){
 function exportDashboardViewToWord(){
  const items=dashboardItems(activeDashboardView),labels={open:'Otvorené spisy',today:'Dnešné úkony',upcoming:'Najbližšie naplánované úkony',done:'Vykonané úkony'};const ew=v=>String(v??'').replace(/[&<>\"]/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;'}[ch]));let body='<h1>'+ew(labels[activeDashboardView]||'Prehľad')+'</h1><p>Vygenerované: '+ew(new Date().toLocaleString('sk-SK'))+'</p>';
  if(!items.length)body+='<p>V tejto kategórii nie sú žiadne záznamy.</p>';
- else if(activeDashboardView==='open'){body+='<table><tr><th>Číslo spisu</th><th>Stav</th><th>Počet úloh a úkonov</th><th>Poznámka</th></tr>';items.forEach(x=>body+='<tr><td>'+ew(x.case.number)+'</td><td>Otvorený</td><td>'+(x.case.actions||[]).length+'</td><td>'+ew(x.case.note||'—')+'</td></tr>');body+='</table>';}
+ else if(activeDashboardView==='open'){body+='<table><tr><th>Číslo spisu</th><th>Stav</th><th>Počet úloh a úkonov</th><th>Poznámka</th></tr>';items.forEach(x=>body+='<tr><td>'+ew(x.case.number)+'</td><td>'+ew(({open:'Otvorený',review:'Na previerke'}[x.case.status]||x.case.status||'—'))+'</td><td>'+(x.case.actions||[]).length+'</td><td>'+ew(x.case.note||'—')+'</td></tr>');body+='</table>';}
  else{body+='<table><tr><th>Číslo spisu</th><th>Úloha / procesný úkon</th><th>Stav</th><th>Dátum</th><th>Čas</th><th>Poznámka</th></tr>';items.forEach(x=>{const a=x.action,c=x.case,n=a.type==='Pridať úkon'?(a.customProcedureTitle||a.type):a.type==='Pribratie znalca iného'?(a.type+(a.otherSpecialty?' · '+a.otherSpecialty:'')):a.type;const d=a.recordType==='procedural'?(a.completedDate||a.date):a.date;const st=a.recordType==='procedural'?'Vykonaný procesný úkon':({planned:'Naplánovaná',done:'Vykonaná',cancelled:'Zrušená'}[a.status]||a.status||'—');body+='<tr><td>'+ew(c.number)+'</td><td>'+ew(n)+'</td><td>'+ew(st)+'</td><td>'+(d?ew(formatDateDMY(d)):'—')+'</td><td>'+ew(a.time||'—')+'</td><td>'+ew(a.note||'—')+'</td></tr>';});body+='</table>';}
  const doc='<!DOCTYPE html><html><head><meta charset="utf-8"><title>'+ew(labels[activeDashboardView])+'</title><style>body{font-family:Arial,sans-serif;color:#222;font-size:10pt}h1{font-size:18pt;color:#174b39;border-bottom:2px solid #b89445;padding-bottom:6px}table{border-collapse:collapse;width:100%;margin:8px 0 18px}th,td{border:1px solid #999;padding:6px;text-align:left;vertical-align:top}th{background:#e8f1eb}@page{size:A4;margin:18mm}</style></head><body>'+body+'</body></html>';const blob=new Blob(['\ufeff',doc],{type:'application/msword;charset=utf-8'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='prehlad_'+activeDashboardView+'.doc';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);
 }
